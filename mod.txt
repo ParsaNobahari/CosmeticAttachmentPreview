@@ -1,0 +1,21 @@
+{
+    "name": "Cosmetic Attachment Preview",
+    "description": "Preview a weapon attachment and keep its model on the gun without equipping it. Previewing saves the cosmetic permanently; the vanilla 'Clear preview' button removes it.",
+    "author": "Custom",
+    "version": "1.0.0",
+    "blt_version": 2,
+    "hooks": [
+        {
+            "hook_id": "lib/managers/menu/blackmarketgui",
+            "script_path": "blackmarketgui.lua"
+        },
+        {
+            "hook_id": "lib/managers/blackmarketmanager",
+            "script_path": "blackmarketmanager.lua"
+        },
+        {
+            "hook_id": "lib/managers/weaponfactorymanager",
+            "script_path": "weaponfactorymanager.lua"
+        }
+    ]
+}
