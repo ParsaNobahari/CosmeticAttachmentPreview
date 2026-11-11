@@ -13,13 +13,13 @@ CAP.data_version = CAP.data_version or 1
 CAP.migrated = CAP.migrated or false
 
 -- These part types are not purely visual. Adding them to the assembled weapon
--- would change gameplay (underbarrel launchers, bipods, ammo/magazines, ...),
--- so they are deliberately ignored.
+-- would change gameplay (underbarrel launchers, bipods, ammo, ...), so they are
+-- deliberately ignored. Magazines are allowed: only their model is assembled,
+-- while ammo capacity is still read from the original equipped blueprint.
 local NON_COSMETIC_TYPES = {
 	underbarrel = true,
 	underbarrel_ammo = true,
 	ammo = true,
-	magazine = true,
 	bipod = true,
 	charm = true,
 	deployable = true,
@@ -30,6 +30,58 @@ local NON_COSMETIC_TYPES = {
 
 local function debug_log(message)
 	log("[CosmeticAttachmentPreview] " .. tostring(message))
+end
+
+local function get_parts_tweak()
+	return tweak_data
+		and tweak_data.weapon
+		and tweak_data.weapon.factory
+		and tweak_data.weapon.factory.parts
+end
+
+-- The default part for a type is the one the weapon ships with. It is used
+-- when a saved cosmetic is the `false` "default/none" marker.
+local function get_default_part_id(factory_id, part_type)
+	local parts = get_parts_tweak()
+	local factory = tweak_data and tweak_data.weapon and tweak_data.weapon.factory
+	local factory_tweak = factory and factory[factory_id]
+	local default_blueprint = factory_tweak and factory_tweak.default_blueprint
+
+	if not parts or not default_blueprint then
+		return nil
+	end
+
+	for _, part_id in ipairs(default_blueprint) do
+		local part = parts[part_id]
+
+		if part and part.type == part_type then
+			return part_id
+		end
+	end
+
+	return nil
+end
+
+local function remove_parts_of_type(blueprint, part_type)
+	local parts = get_parts_tweak()
+
+	if not parts then
+		return false
+	end
+
+	local removed = false
+
+	for i = #blueprint, 1, -1 do
+		local part = parts[blueprint[i]]
+
+		if part and part.type == part_type then
+			table.remove(blueprint, i)
+
+			removed = true
+		end
+	end
+
+	return removed
 end
 
 function CAP:save()
@@ -159,6 +211,27 @@ function CAP:set_cosmetic(factory_id, part_type, part_id)
 	return self:save()
 end
 
+-- `false` means "show this type's default model (or no model at all)".
+-- It is used by "preview without mod" on an equipped part so the equipped
+-- gadget/grip model can be hidden without unequipping it.
+function CAP:set_default_cosmetic(factory_id, part_type)
+	if not factory_id or not part_type then
+		return false
+	end
+
+	self.saved[factory_id] = self.saved[factory_id] or {}
+
+	if self.saved[factory_id][part_type] == false then
+		return true
+	end
+
+	self.saved[factory_id][part_type] = false
+	self.data_version = self.data_version + 1
+	debug_log(string.format("Saved default/none cosmetic for %s (%s)", tostring(factory_id), tostring(part_type)))
+
+	return self:save()
+end
+
 function CAP:clear_cosmetic(factory_id, part_type)
 	local data = self:get_cosmetics(factory_id)
 
@@ -244,9 +317,21 @@ function CAP:apply_to_blueprint(factory_id, blueprint, in_place)
 	for _, part_type in ipairs(part_types) do
 		local part_id = cosmetics[part_type]
 
-		if not NON_COSMETIC_TYPES[part_type] and self:is_part_allowed(factory_id, part_id) then
-			if not factory:change_part_blueprint_only(factory_id, part_id, out) then
-				debug_log(string.format("Could not apply cosmetic %s to %s", tostring(part_id), tostring(factory_id)))
+		if not NON_COSMETIC_TYPES[part_type] then
+			if part_id == false then
+				local default_part_id = get_default_part_id(factory_id, part_type)
+
+				if default_part_id and self:is_part_allowed(factory_id, default_part_id) then
+					if not factory:change_part_blueprint_only(factory_id, default_part_id, out) then
+						debug_log(string.format("Could not apply default part %s to %s", tostring(default_part_id), tostring(factory_id)))
+					end
+				else
+					remove_parts_of_type(out, part_type)
+				end
+			elseif self:is_part_allowed(factory_id, part_id) then
+				if not factory:change_part_blueprint_only(factory_id, part_id, out) then
+					debug_log(string.format("Could not apply cosmetic %s to %s", tostring(part_id), tostring(factory_id)))
+				end
 			end
 		end
 	end

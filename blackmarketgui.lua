@@ -46,7 +46,10 @@ Hooks:PostHook(BlackMarketGui, "preview_weapon_with_mod_callback", "cap_preview_
 	end
 end)
 
--- "Preview without this mod" also removes the saved cosmetic for that slot.
+-- Vanilla "preview without this mod" shows the default part (or no part at
+-- all) even when the clicked mod is only being previewed. Mirror that in the
+-- saved data with a `false` default/none marker so the in-game model matches
+-- what the preview UI shows.
 Hooks:PreHook(BlackMarketGui, "preview_weapon_without_mod_callback", "cap_preview_weapon_without_mod", function(self, data)
 	if not data or not data.category or not data.slot or not data.name then
 		return
@@ -55,9 +58,11 @@ Hooks:PreHook(BlackMarketGui, "preview_weapon_without_mod_callback", "cap_previe
 	local factory_id = get_factory_id(data.category, data.slot)
 	local part = get_part(data.name)
 
-	if factory_id and part and part.type and CAP:get_cosmetic(factory_id, part.type) == data.name then
-		CAP:clear_cosmetic(factory_id, part.type)
+	if not factory_id or not part or not part.type or not CAP:is_cosmetic_type(part.type) then
+		return
 	end
+
+	CAP:set_default_cosmetic(factory_id, part.type)
 end)
 
 -- The vanilla "clear preview" button clears every cosmetic for this weapon.
